@@ -13,6 +13,7 @@ import "../common/implementation/AncillaryData.sol";
 import "../common/implementation/Testable.sol";
 import "../common/implementation/FixedPoint.sol";
 import "../common/implementation/Lockable.sol";
+import "../common/implementation/MultiCaller.sol";
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -33,15 +34,10 @@ interface WETH9Like {
  * to post collateral by earning a fee per fulfilled deposit order.
  * @dev A "Deposit" is an order to send capital from L2 to L1, and a "Relay" is a fulfillment attempt of that order.
  */
-contract BridgePool is Testable, BridgePoolInterface, ERC20, Lockable {
+contract BridgePool is MultiCaller, Testable, BridgePoolInterface, ERC20, Lockable {
     using SafeERC20 for IERC20;
     using FixedPoint for FixedPoint.Unsigned;
     using Address for address;
-
-    // Useful for clients to know if any quote times are for a time prior to the contract's deployment. These
-    // deposits will be impossible to compute realized LP fee % for since there will be no utilization at that quote
-    // time. Therefore, clients need to deal with this special case.
-    uint32 public deploymentTimestamp;
 
     // Token that this contract receives as LP deposits.
     IERC20 public override l1Token;
@@ -58,11 +54,14 @@ contract BridgePool is Testable, BridgePoolInterface, ERC20, Lockable {
     // Reserves that are not yet utilized but are pre-allocated for a pending relay.
     uint256 public pendingReserves;
 
-    // True If this pool houses WETH. If the withdrawn token is WETH then unwrap and send ETH when finalizing
-    // withdrawal.
+    // True If this pool stores WETH. If the withdrawn token is WETH then unwrap and send ETH when finalizing
+    // relays. Also enable LPs to receive ETH, if they choose, when withdrawing liquidity.
     bool public isWethPool;
 
-    // Exponential decay exchange rate to accumulate fees to LPs over time.
+    // Enables the Bridge Admin to enable/disable relays in this pool. Disables relayDeposit and relayAndSpeedUp.
+    bool public relaysEnabled = true;
+
+    // Exponential decay exchange rate to accumulate fees to LPs over time. This can be changed via the BridgeAdmin.
     uint64 public lpFeeRatePerSecond;
 
     // Last timestamp that LP fees were updated.
@@ -154,6 +153,18 @@ contract BridgePool is Testable, BridgePoolInterface, ERC20, Lockable {
     event RelayCanceled(bytes32 indexed depositHash, bytes32 indexed relayHash, address indexed disputer);
     event RelaySettled(bytes32 indexed depositHash, address indexed caller, RelayData relay);
     event BridgePoolAdminTransferred(address oldAdmin, address newAdmin);
+    event RelaysEnabledSet(bool newRelaysEnabled);
+    event LpFeeRateSet(uint64 newLpFeeRatePerSecond);
+
+    modifier onlyBridgeAdmin() {
+        require(msg.sender == address(bridgeAdmin), "Caller not bridge admin");
+        _;
+    }
+
+    modifier onlyIfRelaysEnabld() {
+        require(relaysEnabled, "Relays are disabled");
+        _;
+    }
 
     /**
      * @notice Construct the Bridge Pool.
@@ -180,10 +191,11 @@ contract BridgePool is Testable, BridgePoolInterface, ERC20, Lockable {
         lastLpFeeUpdate = uint32(getCurrentTime());
         lpFeeRatePerSecond = _lpFeeRatePerSecond;
         isWethPool = _isWethPool;
-        deploymentTimestamp = lastLpFeeUpdate;
 
         syncUmaEcosystemParams(); // Fetch OptimisticOracle and Store addresses and L1Token finalFee.
         syncWithBridgeAdminParams(); // Fetch ProposerBondPct OptimisticOracleLiveness, Identifier from the BridgeAdmin.
+
+        emit LpFeeRateSet(lpFeeRatePerSecond);
     }
 
     /*************************************************
@@ -251,15 +263,16 @@ contract BridgePool is Testable, BridgePoolInterface, ERC20, Lockable {
      * speedUpRelay methods concatenated. This could be refactored to just call each method, but there
      * are some gas savings in combining the transfers and hash computations.
      * @dev Caller must have approved this contract to spend the total bond + amount - fees for `l1Token`.
+     * @dev This function can only be called if relays are enabled for this bridge pool.
      * @param depositData the deposit data struct containing all the user's deposit information.
      * @param realizedLpFeePct LP fee calculated off-chain considering the L1 pool liquidity at deposit time, before
      *      quoteTimestamp. The OO acts to verify the correctness of this realized fee. Cannot exceed 50%.
      */
-    function relayAndSpeedUp(DepositData memory depositData, uint64 realizedLpFeePct) public nonReentrant() {
-        // If deposit quote time is before this contract's deployment, then clients will not be able to compute
-        // a realized LP fee %, so we should block such relays.
-        require(depositData.quoteTimestamp >= deploymentTimestamp, "Deposit before deployment");
-
+    function relayAndSpeedUp(DepositData memory depositData, uint64 realizedLpFeePct)
+        public
+        onlyIfRelaysEnabld()
+        nonReentrant()
+    {
         // If no pending relay for this deposit, then associate the caller's relay attempt with it.
         uint32 priceRequestTime = uint32(getCurrentTime());
 
@@ -380,15 +393,16 @@ contract BridgePool is Testable, BridgePoolInterface, ERC20, Lockable {
      * @notice Called by Relayer to execute a slow relay from L2 to L1, fulfilling a corresponding deposit order.
      * @dev There can only be one pending relay for a deposit.
      * @dev Caller must have approved this contract to spend the total bond + amount - fees for `l1Token`.
+     * @dev This function can only be called if relays are enabled for this bridge pool.
      * @param depositData the deposit data struct containing all the user's deposit information.
      * @param realizedLpFeePct LP fee calculated off-chain considering the L1 pool liquidity at deposit time, before
      *      quoteTimestamp. The OO acts to verify the correctness of this realized fee. Cannot exceed 50%.
      */
-    function relayDeposit(DepositData memory depositData, uint64 realizedLpFeePct) public nonReentrant() {
-        // If deposit quote time is before this contract's deployment, then clients will not be able to compute
-        // a realized LP fee %, so we should block such relays.
-        require(depositData.quoteTimestamp >= deploymentTimestamp, "Deposit before deployment");
-
+    function relayDeposit(DepositData memory depositData, uint64 realizedLpFeePct)
+        public
+        onlyIfRelaysEnabld()
+        nonReentrant()
+    {
         // The realizedLPFeePct should never be greater than 0.5e18 and the slow and instant relay fees should never be
         // more than 0.25e18 each. Therefore, the sum of all fee types can never exceed 1e18 (or 100%).
         require(
@@ -669,12 +683,34 @@ contract BridgePool is Testable, BridgePoolInterface, ERC20, Lockable {
 
     /**
      * @notice Enable the current bridge admin to transfer admin to to a new address.
+     * @dev Caller must be BridgeAdmin contract.
      * @param _newAdmin Admin address of the new admin.
      */
-    function changeAdmin(address _newAdmin) public override nonReentrant() {
-        require(msg.sender == address(bridgeAdmin));
+    function changeAdmin(address _newAdmin) public override onlyBridgeAdmin() nonReentrant() {
         bridgeAdmin = BridgeAdminInterface(_newAdmin);
         emit BridgePoolAdminTransferred(msg.sender, _newAdmin);
+    }
+
+    /**
+     * @notice Enable the bridge admin to change the decay rate at which LP shares accumulate fees. The higher this
+     * value, the faster LP shares realize pending fees.
+     * @dev Caller must be BridgeAdmin contract.
+     * @param _newLpFeeRatePerSecond The new rate to set.
+     */
+    function setLpFeeRatePerSecond(uint64 _newLpFeeRatePerSecond) public override onlyBridgeAdmin() nonReentrant() {
+        lpFeeRatePerSecond = _newLpFeeRatePerSecond;
+        emit LpFeeRateSet(lpFeeRatePerSecond);
+    }
+
+    /**
+     * @notice Enable the bridge admin to enable/disable relays for this pool. Acts as a pause. Only effects
+     * relayDeposit and relayAndSpeedUp methods. ALl other contract logic remains functional after a pause.
+     * @dev Caller must be BridgeAdmin contract.
+     * @param _relaysEnabled The new relaysEnabled state.
+     */
+    function setRelaysEnabled(bool _relaysEnabled) public override onlyBridgeAdmin() nonReentrant() {
+        relaysEnabled = _relaysEnabled;
+        emit RelaysEnabledSet(_relaysEnabled);
     }
 
     /************************************
@@ -752,10 +788,11 @@ contract BridgePool is Testable, BridgePoolInterface, ERC20, Lockable {
         _sync(); // Fetch any balance changes due to token bridging finalization and factor them in.
 
         // ExchangeRate := (liquidReserves + utilizedReserves - undistributedLpFees) / lpTokenSupply
-        uint256 numerator = liquidReserves - undistributedLpFees;
-        if (utilizedReserves > 0) numerator += uint256(utilizedReserves);
-        else numerator -= uint256(utilizedReserves * -1);
-        return (numerator * 1e18) / totalSupply();
+        // Note that utilizedReserves can be negative. If this is the case, then liquidReserves is offset by an equal
+        // and opposite size. LiquidReserves + utilizedReserves will always be larger than undistributedLpFees so this
+        // int will always be positive so there is no risk in underflow in type casting in the return line.
+        int256 numerator = int256(liquidReserves) + utilizedReserves - int256(undistributedLpFees);
+        return (uint256(numerator) * 1e18) / totalSupply();
     }
 
     // Return UTF8-decodable ancillary data for relay price request associated with relay hash.
@@ -825,20 +862,7 @@ contract BridgePool is Testable, BridgePoolInterface, ERC20, Lockable {
     }
 
     function _getDepositHash(DepositData memory depositData) private view returns (bytes32) {
-        return
-            keccak256(
-                abi.encode(
-                    depositData.chainId,
-                    depositData.depositId,
-                    depositData.l1Recipient,
-                    depositData.l2Sender,
-                    address(l1Token),
-                    depositData.amount,
-                    depositData.slowRelayFeePct,
-                    depositData.instantRelayFeePct,
-                    depositData.quoteTimestamp
-                )
-            );
+        return keccak256(abi.encode(depositData, address(l1Token)));
     }
 
     // Proposes new price of True for relay event associated with `customAncillaryData` to optimistic oracle. If anyone
