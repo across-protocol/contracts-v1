@@ -1,5 +1,5 @@
 {
-  "name": "@across/contracts",
+  "name": "@across-protocol/contracts",
   "version": "1.0.0",
   "description": "Across smart contracts and tests",
   "dependencies": {
