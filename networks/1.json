@@ -2,5 +2,32 @@
     {
       "contractName": "BridgeAdmin",
       "address": "0x30B44C676A05F1264d1dE9cC31dB5F2A945186b6"
+    },
+    {
+      "contractName": "BridgePool",
+      "deploymentName": "WETHBridgePool",
+      "address": "0x7355Efc63Ae731f584380a9838292c7046c1e433"
+    },
+    {
+      "contractName": "BridgePool",
+      "deploymentName": "USDCBridgePool",
+      "address": "0x256C8919CE1AB0e33974CF6AA9c71561Ef3017b6"
+    },
+    {
+      "contractName": "BridgePool",
+      "deploymentName": "UMABridgePool",
+      "address": "0xdfe0ec39291e3b60ACa122908f86809c9eE64E90"
+    },
+    {
+      "contractName": "Arbitrum_Messenger",
+      "address": "0x0D8563d3B8b3Fec542aaE50a530C606DAc4D1c4F"
+    },
+    {
+      "contractName": "Optimism_Messenger",
+      "address": "0xE59283f44c29c43C0c23E71C906077e49DF714b5"
+    },
+    {
+      "contractName": "Optimism_Wrapper",
+      "address": "0xcFfB47DC5Bd4f6Dc475E98fF92647a583389Ee08"
     }
 ]

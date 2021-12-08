@@ -1,8 +1,4 @@
 const { getHardhatConfig } = require("@uma/common");
-const { TASK_COMPILE_SOLIDITY_GET_SOURCE_PATHS } = require("hardhat/builtin-tasks/task-names");
-
-const glob = require("glob").sync;
-const path = require("path");
 
 let typechain = undefined;
 if (process.env.TYPECHAIN === "web3") {
@@ -14,16 +10,15 @@ if (process.env.TYPECHAIN === "web3") {
 if (typechain !== undefined) require("@typechain/hardhat");
 
 const configOverride = {
-  paths: {
-    root: __dirname,
-    sources: path.join(__dirname, "contracts"),
-    artifacts: path.join(__dirname, "artifacts"),
-    cache: path.join(__dirname, "cache"),
-    tests: path.join(__dirname, "test"),
-  },
-  typechain,
+  typechain
 };
 
 const hardhatConfig = getHardhatConfig(configOverride, __dirname, false);
+
+// To allow customizing the chain id when forking, allow the user to provide an env variable.
+if (process.env.HARDHAT_CHAIN_ID) hardhatConfig.networks.hardhat.chainId = parseInt(process.env.HARDHAT_CHAIN_ID);
+
+// To better support forking, drop accounts when the mnemonic doesn't exist.
+if (!process.env.MNEMONIC) Object.values(hardhatConfig.networks).forEach(network => delete network.accounts);
 
 module.exports = hardhatConfig;

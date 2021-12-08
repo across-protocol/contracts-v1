@@ -1,3 +1,4 @@
-artifacts/*
-node_modules/*
-cache/*
+artifacts/
+node_modules/
+cache/
+deployments/
