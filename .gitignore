@@ -2,3 +2,5 @@ artifacts/
 node_modules/
 cache/
 deployments/
+build/
+contract-types/
