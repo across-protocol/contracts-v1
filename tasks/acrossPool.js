@@ -1,7 +1,7 @@
 const { task, types } = require("hardhat/config");
 const { ZERO_ADDRESS } = require("@uma/common");
 
-task("deploy-across-pool", "Deploys an L1 across pool and whitelists it within the BridgeAdmin")
+task("deploy-pool", "Deploys an L1 across pool and whitelists it within the BridgeAdmin")
   .addParam("lptokenname", "Name of the LP tokens deployed for the pool", undefined, types.string)
   .addParam("lptokensymbol", "Symbol of the LP tokens deployed for the pool", undefined, types.string)
   .addParam("l1tokenaddress", "Address of the token on L1", undefined, types.string)
