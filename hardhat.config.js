@@ -15,6 +15,8 @@ const configOverride = {
 
 const hardhatConfig = getHardhatConfig(configOverride, __dirname, false);
 
+require("./tasks/acrossPool");
+
 // To allow customizing the chain id when forking, allow the user to provide an env variable.
 if (process.env.HARDHAT_CHAIN_ID) hardhatConfig.networks.hardhat.chainId = parseInt(process.env.HARDHAT_CHAIN_ID);
 
