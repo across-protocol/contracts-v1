@@ -1,6 +1,6 @@
 {
   "name": "@across-protocol/contracts",
-  "version": "0.1.0",
+  "version": "0.1.4",
   "description": "Across smart contracts and tests",
   "dependencies": {
     "@eth-optimism/contracts": "^0.5.5",
@@ -20,6 +20,9 @@
     "@nomiclabs/hardhat-etherscan": "^2.1.6",
     "@nomiclabs/hardhat-truffle5": "^2.0.0",
     "@nomiclabs/hardhat-web3": "^2.0.0",
+    "@typechain/ethers-v5": "7.0.1",
+    "@typechain/hardhat": "2.2.0",
+    "@typechain/web3-v1": "3.0.0",
     "@uma/common": "^2.14.0",
     "@uma/contracts-node": "^0.1.15",
     "@uniswap/v3-core": "^1.0.0-rc.2",
@@ -27,7 +30,9 @@
     "decimal.js": "^10.3.1",
     "ethers": "^5.5.2",
     "glob": "^7.2.0",
-    "hardhat": "^2.6.8"
+    "hardhat": "^2.6.8",
+    "lodash.uniqby": "^4.7.0",
+    "typechain": "5.1.2"
   },
   "homepage": "https://across.to",
   "license": "AGPL-3.0-or-later",
@@ -44,13 +49,15 @@
   "files": [
     "/contracts/**/*.sol",
     "/artifacts/**/*",
-    "/dist/**/*",
-    "/types/**/*"
+    "/build/**/*",
+    "/contract-types/**/*",
+    "/networks/**/*"
   ],
   "sideEffects": false,
   "scripts": {
     "test": "mocha 'test/**/*.js'",
-    "build": "hardhat compile && yarn load-addresses",
+    "build": "hardhat compile && yarn typechain && yarn load-addresses && ./scripts/build.js",
+    "typechain": "TYPECHAIN=web3 yarn hardhat typechain && TYPECHAIN=ethers yarn hardhat typechain",
     "load-addresses": "yarn hardhat load-addresses",
     "prepublish": "yarn build"
   },
