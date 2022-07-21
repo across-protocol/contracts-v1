@@ -4,7 +4,7 @@
   "description": "Across smart contracts and tests",
   "dependencies": {
     "@eth-optimism/contracts": "^0.5.5",
-    "@openzeppelin/contracts": "4.1.0",
+    "@openzeppelin/contracts": "4.7.1",
     "@uma/core": "^2.18.0"
   },
   "devDependencies": {
